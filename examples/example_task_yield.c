@@ -53,8 +53,8 @@ task_entry(task2_entry)
 
 int main()
 {
-    task_init(&task1, "Task1", 0, task1_entry, NULL);
-    task_init(&task2, "Task2", 0, task2_entry, NULL);
+    task_create_static(&task1, "Task1", 0, task1_entry, NULL);
+    task_create_static(&task2, "Task2", 0, task2_entry, NULL);
 
     while(1)
     {

@@ -70,7 +70,7 @@ task_entry(task3_entry)
 
 int main()
 {
-    fw_mallocator_init();
+    mem_init();
     
     task_create(task3, "Task3", 0, task3_entry, NULL);
 

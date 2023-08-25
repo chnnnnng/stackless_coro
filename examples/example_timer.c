@@ -26,11 +26,13 @@ task_entry(task1_entry)
 
         sem_give(&sem);
 
-        task_sleep(1000);
+        task_sleep(1);      //sleep 1 => wake and act at next tick
+
+        printf("Task 1 Give a Sem\n");
 
         sem_give(&sem);
 
-        task_sleep(2000);
+        task_sleep(2);
     }
 
     task_exit();
@@ -46,7 +48,7 @@ task_entry(task2_entry)
 
     while(1)
     {
-        sem_take_timeout(&sem, 1500);
+        sem_take_timeout(&sem, 5);
         if(ret == RET_TO)
         {
             printf("Task 2 Timeout\n");
@@ -92,6 +94,7 @@ void signalHandler(int signo)
 static void tick_callback(void)
 {
     timer_ticker();
+    printf("--------------\n");
 }
 
 int main()
@@ -100,10 +103,10 @@ int main()
 
     signal(SIGALRM, signalHandler);
     struct itimerval new_value, old_value;
-    new_value.it_value.tv_sec = 0;
-    new_value.it_value.tv_usec = 1;
-    new_value.it_interval.tv_sec = 0;
-    new_value.it_interval.tv_usec = 1*1000;
+    new_value.it_value.tv_sec = 1;
+    new_value.it_value.tv_usec = 0;
+    new_value.it_interval.tv_sec = 1;
+    new_value.it_interval.tv_usec = 0;
     setitimer(ITIMER_REAL, &new_value, &old_value);
 
     task_create(task3, "Task3", 0, task3_entry, NULL);
