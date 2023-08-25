@@ -6,6 +6,10 @@
 #include "task.h"
 #include "sem.h"
 #include "timer.h"
+#include <signal.h>
+#include <sys/time.h>
+
+static void tick_callback(void);
 
 task_t * task1, * task2, *task3;
 sem_t sem = SEM_INITIAL;
@@ -22,7 +26,11 @@ task_entry(task1_entry)
 
         sem_give(&sem);
 
-        task_yield();
+        task_sleep(1000);
+
+        sem_give(&sem);
+
+        task_sleep(2000);
     }
 
     task_exit();
@@ -32,17 +40,21 @@ task_entry(task2_entry)
 {
     task_begin();
 
+    static int cnt = 0;
+
     printf("Task 2 start\n");
 
     while(1)
     {
-        sem_take(&sem);
-
-        printf("Task 2 Toke a Sem\n");
-
-        sleep(1);
-
-        task_yield();
+        sem_take_timeout(&sem, 1500);
+        if(ret == RET_TO)
+        {
+            printf("Task 2 Timeout\n");
+        }
+        else
+        {
+            printf("Task 2 Toke a Sem, %d\n", cnt++);
+        }
     }
     task_exit();
 }
@@ -68,10 +80,32 @@ task_entry(task3_entry)
     task_exit();
 }
 
+void signalHandler(int signo)
+{
+    switch (signo){
+        case SIGALRM:
+            tick_callback();
+            break;
+   }
+}
+
+static void tick_callback(void)
+{
+    timer_ticker();
+}
+
 int main()
 {
-    fw_mallocator_init();
-    
+    mem_init();
+
+    signal(SIGALRM, signalHandler);
+    struct itimerval new_value, old_value;
+    new_value.it_value.tv_sec = 0;
+    new_value.it_value.tv_usec = 1;
+    new_value.it_interval.tv_sec = 0;
+    new_value.it_interval.tv_usec = 1*1000;
+    setitimer(ITIMER_REAL, &new_value, &old_value);
+
     task_create(task3, "Task3", 0, task3_entry, NULL);
 
     task_start_scheduler();

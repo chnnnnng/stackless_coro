@@ -1,5 +1,5 @@
-#ifndef __FW_MACRO_UTIL_H
-#define __FW_MACRO_UTIL_H
+#ifndef __MACRO_UTIL_H
+#define __MACRO_UTIL_H
 
 
 /**

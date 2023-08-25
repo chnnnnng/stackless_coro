@@ -20,3 +20,9 @@ typedef struct sem_t
         task_wait_until((pSem)->count > 0); \
         --((pSem)->count);                  \
     }while(0)
+
+#define sem_take_timeout(pSem, Timeout)     \
+    do{                                     \
+        task_wait_until_timeout((pSem)->count > 0, (Timeout)); \
+        if(ret == RET_OK) --((pSem)->count);                  \
+    }while(0)

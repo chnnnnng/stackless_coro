@@ -10,4 +10,4 @@ link_libraries(coro)
 # add the executable
 
 # add_executable(main example_task_create_and_join.c)
-add_executable(main example_sem.c)
+add_executable(main example_timer.c)

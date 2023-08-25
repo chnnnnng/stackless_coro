@@ -1,9 +1,9 @@
 #pragma once
 
+#include "common.h"
 #include "continuation.h"
-
-#include "stdint.h"
-#include "stdlib.h"
+#include "timer.h"
+#include "memory.h"
 
 typedef uint8_t task_priority_t;
 
@@ -18,12 +18,19 @@ typedef enum task_state_e
 
 typedef void * task_parameter_t;
 
+typedef struct task_flag_t
+{
+    uint8_t malloc     : 1;
+    uint8_t sleeping   : 1;
+    uint8_t timeout    : 1;
+} task_flag_t;
+
 typedef struct task_t
 {
     continuation_marker_t   marker;
     const char * name;
     task_priority_t priority;
-    uint8_t malloc_flag;
+    task_flag_t flags;
     task_state_e (*entry)(struct task_t *);
     task_parameter_t parameter;
     task_state_e state;
@@ -38,27 +45,29 @@ typedef struct task_t
         coninuation_init((pTask)->marker);           \
         (pTask)->name = Name;                        \
         (pTask)->priority = Priority;                \
-        (pTask)->malloc_flag = 0;                    \
+        (pTask)->flags.malloc = 0;                   \
+        (pTask)->flags.sleeping = 0;                 \
+        (pTask)->flags.timeout = 0;                   \
         (pTask)->entry = Entry;                      \
         (pTask)->parameter = Parameter;              \
         (pTask)->state = TASK_INIT;                  \
-        task_list_push((pTask));                    \
+        _task_list_push((pTask));                    \
     }while(0)
 
 
 #define task_create(pTask, Name, Priority, Entry, Parameter)    \
     do{                                                         \
-        pTask = malloc(sizeof(task_t));                         \
+        pTask = mem_alloc(sizeof(task_t));                         \
         task_create_static(pTask, Name, Priority, Entry, Parameter);     \
-        (pTask)->malloc_flag = 1;                               \
+        (pTask)->flags.malloc = 1;                               \
     }while(0)
 
 
 #define _task_delete(pTask) \
     do{                             \
-        task_list_del(pTask);       \
-        if(pTask->malloc_flag)      \
-            free(pTask);            \
+        _task_list_del(pTask);       \
+        if(pTask->flags.malloc)      \
+            mem_free(pTask);            \
     }while(0)
 
 
@@ -72,6 +81,8 @@ typedef struct task_t
 
 #define task_begin()                            \
         (task)->state = TASK_ACTIVE;                \
+        static retval ret = RET_OK;                 \
+        static timer_handler timer;                 \
         continuation_resume((task)->marker)         \
 
 
@@ -83,6 +94,14 @@ typedef struct task_t
         return TASK_EXITED;                                 \
     }while(0)
 
+
+#define task_yield()                            \
+    do{                                             \
+        (task)->state = TASK_YIELDED;               \
+        continuation_mark((task)->marker);          \
+        if((task)->state == TASK_YIELDED)           \
+            return TASK_YIELDED;                    \
+    }while(0)
 
 
 #define task_wait_while(condition)            \
@@ -97,23 +116,26 @@ typedef struct task_t
     task_wait_while(!(condition))
 
 
-#define task_yield()                            \
+#define task_wait_while_timeout(condition, Timeout)            \
     do{                                             \
-        (task)->state = TASK_YIELDED;               \
-        continuation_mark((task)->marker);          \
-        if((task)->state == TASK_YIELDED)           \
-            return TASK_YIELDED;                    \
+        timer = _task_set_timeout_timer((task), ((ltime_t)(Timeout)));    \
+        continuation_mark((task)->marker);            \
+        if((condition) && ((task)->flags.timeout == 0)) \
+            return (task)->state = TASK_WAITING;      \
+        else if((task)->flags.timeout == 0)         \
+        {                                            \
+            timer_unset(timer);                         \
+            ret = RET_OK;                            \
+        }                                           \
+        else                                        \
+        {                                           \
+            ret = RET_TO;                           \
+        }                                           \
     }while(0)
 
 
-#define task_yield_until(condition)           \
-    do{                                             \
-        (task)->state = TASK_YIELDED;               \
-        continuation_mark((task)->marker);          \
-        if((task)->state == TASK_YIELDED            \
-        or ! (condition))                           \
-            return TASK_YIELDED;                    \
-    }while(0)
+#define task_wait_until_timeout(condition, Timeout)            \
+    task_wait_while_timeout((!(condition)), (Timeout))
 
 
 #define task_schedule(pTask)                        \
@@ -123,15 +145,23 @@ typedef struct task_t
 #define _task_is_exited(pTask)                      \
     ((pTask)->state < TASK_EXITED ? 1 : 0)
 
+
 #define task_join(...)  \
     task_wait_while(FL_FOREACH(|,_task_is_exited,, __VA_ARGS__))
+
+
+#define task_sleep(time_in_tick)                    \
+    do{                                             \
+        _task_set_sleep_timer((task), ((ltime_t)time_in_tick));\
+        task_wait_while((task)->flags.sleeping == 1);   \
+    }while(0)
 
 
 #define task_start_scheduler()                                                  \
     do{                                                                         \
         task_t * task_to_schedule;                                              \
         /*从任务队列中取出最优先调度的任务*/                                       \
-        while((task_to_schedule = task_list_pop()))                             \
+        while((task_to_schedule = _task_list_pop()))                             \
         {                                                                       \
             /*调度该任务*/                                                       \
             if(task_schedule(task_to_schedule))                                 \

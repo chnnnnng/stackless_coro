@@ -1,10 +1,12 @@
 #include "task.h"
 
+
 typedef struct task_lists_t
 {
     uint32_t    bitmap;
     task_t *    lists[32];
 } task_lists_t;
+
 
 static task_lists_t task_list_a = {.bitmap = 0, .lists = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}},
                     task_list_b = {.bitmap = 0, .lists = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}},
@@ -12,7 +14,7 @@ static task_lists_t task_list_a = {.bitmap = 0, .lists = {NULL, NULL, NULL, NULL
                     *task_list_the_other = &task_list_b;
 
 
-static void _task_list_push(task_t ** list, task_t * task_to_push)
+static void __task_list_push(task_t ** list, task_t * task_to_push)
 {
     if(*list == NULL)
     {
@@ -31,7 +33,8 @@ static void _task_list_push(task_t ** list, task_t * task_to_push)
     }
 }
 
-static task_t * _task_list_pop(task_t ** list)
+
+static task_t * __task_list_pop(task_t ** list)
 {
     if(*list == NULL)
     {
@@ -57,12 +60,6 @@ static task_t * _task_list_pop(task_t ** list)
     }
 }
 
-void task_list_push(task_t * task)
-{
-    _task_list_push(&(task_list->lists[task->priority]), task);
-    task_list->bitmap |= (1 << (task->priority & 31));
-    task->list = task_list;
-}
 
 static uint8_t _fls(uint32_t x)  
 {  
@@ -93,7 +90,16 @@ static uint8_t _fls(uint32_t x)
     return r;  
 }  
 
-task_t * task_list_pop(void)
+
+void _task_list_push(task_t * task)
+{
+    __task_list_push(&(task_list->lists[task->priority]), task);
+    task_list->bitmap |= (1 << (task->priority & 31));
+    task->list = task_list;
+}
+
+
+task_t * _task_list_pop(void)
 {
     uint8_t highest_priority = _fls(task_list->bitmap);
     if(highest_priority == 0)
@@ -103,8 +109,8 @@ task_t * task_list_pop(void)
     else
     {
         highest_priority -= 1;
-        task_t * popped_task = _task_list_pop(&(task_list->lists[highest_priority]));
-        _task_list_push(&(task_list_the_other->lists[highest_priority]), popped_task);
+        task_t * popped_task = __task_list_pop(&(task_list->lists[highest_priority]));
+        __task_list_push(&(task_list_the_other->lists[highest_priority]), popped_task);
         task_list_the_other->bitmap |= (1 << (highest_priority & 31));
         popped_task->list = task_list_the_other;
         if(task_list->lists[highest_priority] == NULL)
@@ -121,7 +127,8 @@ task_t * task_list_pop(void)
     }
 }
 
-void task_list_del(task_t * task)
+
+void _task_list_del(task_t * task)
 {
     task_t * next = task->next;
     task_t * prev = task->prev;
@@ -138,6 +145,33 @@ void task_list_del(task_t * task)
         task->list = NULL;
     }
 }
+
+
+static void _task_sleep_timer_callback(void * parameter)
+{
+    task_t * task = (task_t *)parameter;
+    task->flags.sleeping = 0;
+}
+
+
+void _task_set_sleep_timer(task_t * task, ltime_t time)
+{
+    task->flags.sleeping = 1;
+    timer_set(time, _task_sleep_timer_callback, task);
+}
+
+static void _task_timeout_timer_callback(void * parameter)
+{
+    task_t * task = (task_t *)parameter;
+    task->flags.timeout = 1;
+}
+
+timer_handler _task_set_timeout_timer(task_t * task, ltime_t time)
+{
+    task->flags.timeout = 0;
+    return timer_set(time, _task_timeout_timer_callback, task);
+}
+
 
 __attribute__((weak)) void task_scheduler_spare_time(void)
 {
